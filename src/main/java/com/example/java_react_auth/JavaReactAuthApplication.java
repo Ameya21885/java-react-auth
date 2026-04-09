@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class JavaReactAuthApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(JavaReactAuthApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(JavaReactAuthApplication.class, args);
+    }
 
 }
