@@ -127,7 +127,14 @@
 		</dependency>
 
 	</dependencies>
-
+	<profiles>
+		<profile>
+			<id>production</id>
+			<properties>
+				<spring.profiles.active>prod</spring.profiles.active>
+			</properties>
+		</profile>
+	</profiles>
 	<build>
 		<plugins>
 			<plugin>

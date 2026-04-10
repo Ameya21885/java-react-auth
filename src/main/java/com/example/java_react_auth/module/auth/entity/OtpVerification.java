@@ -27,6 +27,7 @@ public class OtpVerification {
     @Column(nullable = false)
     private LocalDateTime expiryTime;
 
+    @Builder.Default
     private boolean isVerified = false;
 
     private LocalDateTime createdAt;

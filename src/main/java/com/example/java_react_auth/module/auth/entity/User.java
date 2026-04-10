@@ -32,6 +32,7 @@ public class User {
 
     private String username;
 
+    @Builder.Default
     private boolean enabled = true;
 
     private LocalDateTime createdAt;

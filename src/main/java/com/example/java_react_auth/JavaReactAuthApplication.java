@@ -5,7 +5,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
-// testing
 @SpringBootApplication
 public class JavaReactAuthApplication {
 
