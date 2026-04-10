@@ -1,9 +1,11 @@
 package com.example.java_react_auth;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import io.github.cdimascio.dotenv.Dotenv;
+
+// testing
 @SpringBootApplication
 public class JavaReactAuthApplication {
 
@@ -12,8 +14,8 @@ public class JavaReactAuthApplication {
                 .ignoreIfMissing()
                 .load();
 
-        dotenv.entries().forEach(entry ->
-                System.setProperty(entry.getKey(), entry.getValue())
+        dotenv.entries().forEach(entry
+                -> System.setProperty(entry.getKey(), entry.getValue())
         );
 
         SpringApplication.run(JavaReactAuthApplication.class, args);
