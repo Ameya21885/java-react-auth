@@ -1,6 +1,7 @@
 package com.example.java_react_auth.module.auth.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,43 +41,62 @@ public class AuthService {
         return identifier;
     }
 
-    @Transactional
-    public String sendOtp(String identifier) {
-        final String normalizedId = normalizeIdentifier(identifier);
-        // 1. Check if user is registered (Optional: depending on flow, but requested originally)
-        boolean isRegistered = normalizedId.contains("@")
-                ? userRepository.findByEmail(normalizedId).isPresent()
-                : userRepository.findByPhoneNumber(normalizedId).isPresent();
-
-        if (!isRegistered) {
-            throw new RuntimeException("User not registered with identifier: " + normalizedId);
+    private Optional<User> findRegisteredUserByIdentifier(String normalizedId) {
+        if (normalizedId == null || normalizedId.isBlank()) {
+            return Optional.empty();
         }
+        if (normalizedId.contains("@")) {
+            return userRepository.findByEmail(normalizedId);
+        }
+        return userRepository.findByPhoneNumber(normalizedId);
+    }
 
-        // 2. Generating OTP
-        String otp = String.format("%06d", new Random().nextInt(1000000));
+    private String generateOtpCode() {
+        return String.format("%06d", new Random().nextInt(1000000));
+    }
 
-        // 3. Save OTP to Memory
-        memoryOtpService.saveOtp(normalizedId, otp);
-
-        // 4. LOG OTP to Console for development (solves "Authentication failed" blockage)
+    private void logOtpToConsole(String normalizedId, String otp) {
         System.out.println("========================================");
         System.out.println("OTP for " + normalizedId + " is: " + otp);
         System.out.println("========================================");
+    }
 
-        // 5. Send OTP via Notification Service
+    /** Sends OTP on a channel; does not persist OTP (caller handles storage). */
+    private String trySendOtpNotification(String normalizedId, String otp) {
         try {
             NotificationService service = notificationServices.stream()
                     .filter(s -> s.supports(normalizedId))
                     .findFirst()
                     .orElseThrow(() -> new RuntimeException("No notification service found for: " + normalizedId));
-
             service.sendOtp(normalizedId, otp);
+            return "OTP sent successfully to " + normalizedId;
         } catch (Exception e) {
             System.err.println("Failed to send notification: " + e.getMessage());
-            return "OTP generated and logged to console, but notification failed: " + e.getMessage();
+            return "OTP generated and logged to console, but notification failed for " + normalizedId + ": "
+                    + e.getMessage();
+        }
+    }
+
+    /**
+     * Persists OTP and attempts delivery for one channel (email or phone).
+     *
+     * @return user-facing status for this channel
+     */
+    private String deliverOtpToChannel(String normalizedId, String otp) {
+        memoryOtpService.saveOtp(normalizedId, otp);
+        logOtpToConsole(normalizedId, otp);
+        return trySendOtpNotification(normalizedId, otp);
+    }
+
+    @Transactional
+    public String sendOtp(String identifier) {
+        final String normalizedId = normalizeIdentifier(identifier);
+        if (findRegisteredUserByIdentifier(normalizedId).isEmpty()) {
+            throw new RuntimeException("User not registered with identifier: " + normalizedId);
         }
 
-        return "OTP sent successfully to " + normalizedId;
+        String otp = generateOtpCode();
+        return deliverOtpToChannel(normalizedId, otp);
     }
 
     public boolean verifyOtp(String identifier, String otp) {
@@ -107,12 +127,28 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-        return "Account created successfully!";
+
+        String otp = generateOtpCode();
+        memoryOtpService.saveOtp(email, otp);
+        memoryOtpService.saveOtp(phoneNumber, otp);
+        System.out.println("========================================");
+        System.out.println("Registration OTP (same code on email & phone) for " + email + " / " + phoneNumber
+                + " is: " + otp);
+        System.out.println("========================================");
+
+        String emailStatus = trySendOtpNotification(email, otp);
+        String phoneStatus = trySendOtpNotification(phoneNumber, otp);
+
+        return "Account created successfully! " + emailStatus + " " + phoneStatus;
     }
 
     public LoginResponse login(LoginRequest request) {
-        String email = normalizeIdentifier(request.getEmail());
-        User user = userRepository.findByEmail(email)
+        String raw = request.resolveLoginIdentifier();
+        if (raw == null || raw.isBlank()) {
+            throw new RuntimeException("Email or mobile is required");
+        }
+        String normalizedId = normalizeIdentifier(raw);
+        User user = findRegisteredUserByIdentifier(normalizedId)
                 .orElseThrow(() -> new RuntimeException("User not registered"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
