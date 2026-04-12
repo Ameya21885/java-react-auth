@@ -1,6 +1,7 @@
 package com.example.java_react_auth.module.auth.service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Random;
 
@@ -29,16 +30,32 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
 
+    /**
+     * Normalizes login / OTP identifiers: emails are trimmed and lower-cased; phones have non-digits
+     * stripped, 10-digit Indian mobiles get +91, 12-digit numbers starting with 91 become +91….
+     */
     private String normalizeIdentifier(String identifier) {
         if (identifier == null) {
             return null;
         }
-        identifier = identifier.trim();
-        // If it's a 10-digit numeric string, prepend +91
-        if (identifier.matches("^\\d{10}$")) {
-            return "+91" + identifier;
+        String trimmed = identifier.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
         }
-        return identifier;
+        if (trimmed.contains("@")) {
+            return trimmed.toLowerCase(Locale.ROOT);
+        }
+        String digits = trimmed.replaceAll("\\D", "");
+        if (digits.isEmpty()) {
+            return trimmed;
+        }
+        if (digits.length() == 10) {
+            return "+91" + digits;
+        }
+        if (digits.length() >= 12 && digits.startsWith("91")) {
+            return "+" + digits;
+        }
+        return "+" + digits;
     }
 
     private Optional<User> findRegisteredUserByIdentifier(String normalizedId) {
@@ -46,7 +63,7 @@ public class AuthService {
             return Optional.empty();
         }
         if (normalizedId.contains("@")) {
-            return userRepository.findByEmail(normalizedId);
+            return userRepository.findByEmailIgnoreCase(normalizedId);
         }
         return userRepository.findByPhoneNumber(normalizedId);
     }
@@ -109,7 +126,7 @@ public class AuthService {
         String email = normalizeIdentifier(request.getEmail());
         String phoneNumber = normalizeIdentifier(request.getPhoneNumber());
 
-        if (userRepository.findByEmail(email).isPresent()) {
+        if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
             throw new RuntimeException("Email is already registered");
         }
         if (userRepository.findByPhoneNumber(phoneNumber).isPresent()) {
@@ -176,7 +193,7 @@ public class AuthService {
         }
 
         // 2. Find User
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new RuntimeException("User not registered"));
 
         // 3. Update Password
