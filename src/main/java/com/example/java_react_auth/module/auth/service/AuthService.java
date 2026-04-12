@@ -5,6 +5,8 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Random;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final MemoryOtpService memoryOtpService;
@@ -84,11 +88,14 @@ public class AuthService {
             NotificationService service = notificationServices.stream()
                     .filter(s -> s.supports(normalizedId))
                     .findFirst()
-                    .orElseThrow(() -> new RuntimeException("No notification service found for: " + normalizedId));
+                    .orElseThrow(() -> new RuntimeException(
+                            "No notification channel available for: " + normalizedId
+                                    + ". For email set MAIL_PASSWORD; for WhatsApp set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,"
+                                    + " and join the Twilio sandbox from the recipient phone if using the sandbox number."));
             service.sendOtp(normalizedId, otp);
             return "OTP sent successfully to " + normalizedId;
         } catch (Exception e) {
-            System.err.println("Failed to send notification: " + e.getMessage());
+            log.warn("Failed to send OTP notification to {}: {}", normalizedId, e.toString(), e);
             return "OTP generated and logged to console, but notification failed for " + normalizedId + ": "
                     + e.getMessage();
         }
@@ -114,6 +121,46 @@ public class AuthService {
 
         String otp = generateOtpCode();
         return deliverOtpToChannel(normalizedId, otp);
+    }
+
+    /**
+     * Sends OTP to an email during sign-up. Does not require an existing account.
+     * If the email is already registered, refuses (avoids spamming existing users).
+     */
+    @Transactional
+    public String sendRegistrationOtpForEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("Email is required");
+        }
+        String normalized = normalizeIdentifier(email);
+        if (!normalized.contains("@")) {
+            throw new RuntimeException("Invalid email address");
+        }
+        if (userRepository.findByEmailIgnoreCase(normalized).isPresent()) {
+            throw new RuntimeException("This email is already registered");
+        }
+        String otp = generateOtpCode();
+        return deliverOtpToChannel(normalized, otp);
+    }
+
+    /**
+     * Sends OTP to a phone during sign-up. Does not require an existing account.
+     * If the number is already registered, refuses.
+     */
+    @Transactional
+    public String sendRegistrationOtpForPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            throw new RuntimeException("Phone number is required");
+        }
+        String normalized = normalizeIdentifier(phone);
+        if (normalized.contains("@")) {
+            throw new RuntimeException("Invalid phone number");
+        }
+        if (userRepository.findByPhoneNumber(normalized).isPresent()) {
+            throw new RuntimeException("This phone number is already registered");
+        }
+        String otp = generateOtpCode();
+        return deliverOtpToChannel(normalized, otp);
     }
 
     public boolean verifyOtp(String identifier, String otp) {

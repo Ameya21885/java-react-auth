@@ -23,6 +23,28 @@ public class AuthController {
         }
     }
 
+    /** Sign-up only: send OTP to email without requiring an existing user (login uses {@code /send-otp}). */
+    @PostMapping("/register/send-otp/email")
+    public ResponseEntity<String> sendRegistrationEmailOtp(@RequestBody RegistrationEmailOtpRequest request) {
+        try {
+            String message = authService.sendRegistrationOtpForEmail(request.getEmail());
+            return ResponseEntity.ok(message);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Sign-up only: send OTP to phone without requiring an existing user. */
+    @PostMapping("/register/send-otp/phone")
+    public ResponseEntity<String> sendRegistrationPhoneOtp(@RequestBody RegistrationPhoneOtpRequest request) {
+        try {
+            String message = authService.sendRegistrationOtpForPhone(request.getPhoneNumber());
+            return ResponseEntity.ok(message);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     @PostMapping("/verify-otp")
     public ResponseEntity<String> verifyOtp(@RequestBody OtpVerifyRequest request) {
         boolean isValid = authService.verifyOtp(request.getIdentifier(), request.getOtp());

@@ -20,32 +20,66 @@ public class TwilioSmsService implements NotificationService {
     @Value("${twilio.whatsapp.from}")
     private String fromWhatsApp;
 
+    /**
+     * Optional Twilio Content API template SID. Leave empty to send a plain WhatsApp body (works inside
+     * the 24-hour session or for sandbox testing; first contact may still require sandbox opt-in).
+     */
+    @Value("${twilio.whatsapp.content-sid:}")
+    private String contentSid;
+
     @PostConstruct
     public void init() {
-        if (accountSid != null && !accountSid.isEmpty() && authToken != null && !authToken.isEmpty()) {
-            Twilio.init(accountSid, authToken);
+        if (isTwilioConfigured()) {
+            Twilio.init(accountSid.trim(), authToken.trim());
         }
+    }
+
+    private boolean isTwilioConfigured() {
+        return accountSid != null && !accountSid.isBlank()
+                && authToken != null && !authToken.isBlank();
+    }
+
+    private static String toWhatsAppAddress(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.regionMatches(true, 0, "whatsapp:", 0, 9)) {
+            return t;
+        }
+        return "whatsapp:" + t;
     }
 
     @Override
     public void sendOtp(String target, String otp) {
-        String contentVariables = "{\"1\":\"" + otp + "\"}";
+        if (!isTwilioConfigured()) {
+            throw new IllegalStateException(
+                    "Twilio is not configured: set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN on the server.");
+        }
 
-        Message message = Message.creator(
-                new PhoneNumber("whatsapp:" + target),
-                new PhoneNumber("whatsapp:" + fromWhatsApp),
-                "Your OTP is " + otp // Fallback body
-        )
-        .setContentSid("HX229f5a04fd0510ce1b071852155d3e75")
-        .setContentVariables(contentVariables)
-        .create();
+        String body = "Your OTP is " + otp;
+        var creator = Message.creator(
+                new PhoneNumber(toWhatsAppAddress(target)),
+                new PhoneNumber(toWhatsAppAddress(fromWhatsApp)),
+                body);
 
+        if (contentSid != null && !contentSid.isBlank()) {
+            creator = creator.setContentSid(contentSid.trim()).setContentVariables("{\"1\":\"" + otp + "\"}");
+        }
+
+        Message message = creator.create();
         System.out.println("Sent WhatsApp OTP SID: " + message.getSid());
     }
 
     @Override
     public boolean supports(String target) {
-        // Basic check if it's a phone number (start with +)
-        return target != null && target.matches("^\\+?[0-9]{10,15}$");
+        if (!isTwilioConfigured()) {
+            return false;
+        }
+        // Normalized phones from AuthService are E.164 with leading +
+        return target != null
+                && target.startsWith("+")
+                && !target.contains("@")
+                && target.substring(1).matches("\\d{8,14}");
     }
 }
