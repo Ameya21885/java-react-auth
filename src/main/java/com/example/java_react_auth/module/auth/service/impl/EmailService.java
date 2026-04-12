@@ -25,7 +25,8 @@ public class EmailService implements NotificationService {
     public void sendOtp(String target, String otp) {
         if (mailPassword == null || mailPassword.isBlank()) {
             throw new IllegalStateException(
-                    "Email is not configured: set MAIL_PASSWORD (Gmail app password) or spring.mail.password on the server.");
+                    "Email is not configured: set MAIL_PASSWORD, SPRING_MAIL_PASSWORD, or GMAIL_APP_PASSWORD "
+                            + "(Gmail app password) in the server environment, or spring.mail.password in configuration.");
         }
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
@@ -48,9 +49,7 @@ public class EmailService implements NotificationService {
 
     @Override
     public boolean supports(String target) {
-        if (mailPassword == null || mailPassword.isBlank()) {
-            return false;
-        }
+        // Always handle @ identifiers here so AuthService can attempt SMTP and return a clear error if unset.
         return target != null && target.contains("@");
     }
 }
